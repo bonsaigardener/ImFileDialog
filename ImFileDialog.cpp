@@ -1,23 +1,40 @@
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
+#  define _CRT_SECURE_NO_WARNINGS
 #endif
 #include "ImFileDialog.h"
 
 #include <fstream>
 #include <algorithm>
 #include <sys/stat.h>
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include <imgui/imgui.h>
-#include <imgui/imgui_internal.h>
+#if 0
+#  define IMGUI_DEFINE_MATH_OPERATORS
+#  include <imgui/imgui.h>
+#  include <imgui/imgui_internal.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#  define STB_IMAGE_IMPLEMENTATION
+#  include "stb_image.h"
+#else
+#  include "stb_image_lib.h"
+#endif	
 
 #ifdef _WIN32
-#include <Windows.h>
+#if 0
+#  include <Windows.h>
+#endif
+
 #include <shellapi.h>
 #include <Lmcons.h>
+
 #pragma comment(lib, "Shell32.lib")
+
+#ifndef GetObject
+#  ifdef UNICODE
+#    define GetObject  GetObjectW
+#  else
+#    define GetObject  GetObjectA
+#  endif // !UNICODE
+#endif
+
 #else
 #include <unistd.h>
 #include <pwd.h>
@@ -27,6 +44,9 @@
 #define GUI_ELEMENT_SIZE 24
 #define DEFAULT_ICON_SIZE 32
 #define PI 3.141592f
+
+#pragma warning(push)
+#pragma warning(disable: 4244) //'=': conversion from 'int' to 'char', possible loss of data
 
 namespace ifd {
 	/* UI CONTROLS */
@@ -75,7 +95,9 @@ namespace ifd {
 		ImGuiContext& g = *GImGui;
 		ImGuiWindow* window = g.CurrentWindow;
 
-		ImU32 id = window->GetID(label);
+		//ImU32 id = 
+		window->GetID(label);
+		
 		ImVec2 pos = window->DC.CursorPos;
 		bool ret = ImGui::InvisibleButton(label, ImVec2(-FLT_MIN, g.FontSize + g.Style.FramePadding.y * 2));
 
@@ -399,7 +421,7 @@ namespace ifd {
 		DWORD d = GetLogicalDrives();
 		for (int i = 0; i < 26; i++)
 			if (d & (1 << i))
-				thisPC->Children.push_back(new FileTreeNode(std::string(1, 'A' + i) + ":"));
+				thisPC->Children.push_back(new FileTreeNode(std::string(1, (char)('A' + i)) + ":"));
 		m_treeCache.push_back(thisPC);
 #else
 		std::error_code ec;
@@ -1470,3 +1492,6 @@ const char* ifd::GetDefaultFileIcon()
 {
 	return (const char*)&file_icon[0];
 }
+
+#pragma warning(pop)
+
