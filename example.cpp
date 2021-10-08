@@ -1,4 +1,5 @@
-#if 0
+#ifdef SGE_UI_INTEGRATION
+#else
 #include <SDL2/SDL.h>
 #include <imgui/imgui.h>
 #include <imgui/examples/imgui_impl_sdl.h>

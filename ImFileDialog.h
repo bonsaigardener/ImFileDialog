@@ -9,7 +9,9 @@
 #include <unordered_map>
 #include <algorithm> // std::min, std::max
 
-#include "./../../../UITypes.h"
+#ifdef SGE_UI_INTEGRATION
+#  include "./../../../UITypes.h"
+#endif
 
 #define IFD_DIALOG_FILE			0
 #define IFD_DIALOG_DIRECTORY	1
@@ -49,7 +51,7 @@ namespace ifd {
 		}
 		inline float GetZoom() { return m_zoom; }
 
-		std::function<void*(uint8_t*, int, int, char)> CreateTexture; // char -> fmt -> { 0 = BGRA, 1 = RGBA }
+		std::function<void*(uint8_t*, int, int, char, const char*)> CreateTexture; // char -> fmt -> { 0 = BGRA, 1 = RGBA } char* nameOrPath
 		std::function<void(void*)> DeleteTexture;
 
 		class FileTreeNode {
@@ -134,6 +136,6 @@ namespace ifd {
 		void m_renderFileDialog();
 	};
 
-	static const char* GetDefaultFolderIcon();
-	static const char* GetDefaultFileIcon();
+	extern const char* GetDefaultFolderIcon();
+	extern const char* GetDefaultFileIcon();
 }

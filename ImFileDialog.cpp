@@ -6,19 +6,21 @@
 #include <fstream>
 #include <algorithm>
 #include <sys/stat.h>
-#if 0
+
+#ifdef SGE_UI_INTEGRATION
+#  include "stb_image_lib.h"
+#else
 #  define IMGUI_DEFINE_MATH_OPERATORS
 #  include <imgui/imgui.h>
 #  include <imgui/imgui_internal.h>
 
 #  define STB_IMAGE_IMPLEMENTATION
 #  include "stb_image.h"
-#else
-#  include "stb_image_lib.h"
-#endif	
+#endif
 
 #ifdef _WIN32
-#if 0
+#ifdef SGE_UI_INTEGRATION
+#else
 #  include <Windows.h>
 #endif
 
@@ -36,8 +38,8 @@
 #endif
 
 #else
-#include <unistd.h>
-#include <pwd.h>
+#  include <unistd.h>
+#  include <pwd.h>
 #endif
 
 #define ICON_SIZE ImGui::GetFont()->FontSize + 3
@@ -79,7 +81,7 @@ namespace ifd {
 			clicked = false;
 		}
 		if (hovered || active)
-			window->DrawList->AddRectFilled(g.LastItemData.Rect.Min, g.LastItemData.Rect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered]));
+			window->DrawList->AddRectFilled(window->DC.LastItemRect.Min, window->DC.LastItemRect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered]));
 		
 		// Icon, text
 		float icon_posX = pos.x + g.FontSize + g.Style.FramePadding.y;
@@ -104,7 +106,7 @@ namespace ifd {
 		bool hovered = ImGui::IsItemHovered();
 		bool active = ImGui::IsItemActive();
 		if (hovered || active)
-			window->DrawList->AddRectFilled(g.LastItemData.Rect.Min, g.LastItemData.Rect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered]));
+			window->DrawList->AddRectFilled(window->DC.LastItemRect.Min, window->DC.LastItemRect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered]));
 
 		// Icon, text
 		window->DrawList->AddImage(icon, ImVec2(pos.x, pos.y), ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE));
@@ -252,7 +254,7 @@ namespace ifd {
 		bool hovered = ImGui::IsItemHovered();
 		bool active = ImGui::IsItemActive();
 
-		float size = g.LastItemData.Rect.Max.x - g.LastItemData.Rect.Min.x;
+		float size = window->DC.LastItemRect.Max.x - window->DC.LastItemRect.Min.x;
 
 		int numPoints = 5;
 		float innerRadius = size / 4;
@@ -322,7 +324,7 @@ namespace ifd {
 
 		
 		if (hovered || active || isSelected)
-			window->DrawList->AddRectFilled(g.LastItemData.Rect.Min, g.LastItemData.Rect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : (isSelected ? ImGuiCol_Header : ImGuiCol_HeaderHovered)]));
+			window->DrawList->AddRectFilled(window->DC.LastItemRect.Min, window->DC.LastItemRect.Max, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[active ? ImGuiCol_HeaderActive : (isSelected ? ImGuiCol_Header : ImGuiCol_HeaderHovered)]));
 
 		if (hasPreview) {
 			ImVec2 availSize = ImVec2(size.x, iconSize);
@@ -512,26 +514,57 @@ namespace ifd {
 
 		return true;
 	}
+	
 	bool FileDialog::IsDone(const std::string& key)
 	{
 		bool isMe = m_currentKey == key;
 
-		if (isMe && m_isOpen) {
-			if (!m_calledOpenPopup) {
+		if (isMe && m_isOpen) 
+		{
+			if (!m_calledOpenPopup) 
+			{
 				ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 				ImGui::OpenPopup(m_currentTitle.c_str());
 				m_calledOpenPopup = true;
 			}
 
-			if (ImGui::BeginPopupModal(m_currentTitle.c_str(), &m_isOpen, ImGuiWindowFlags_NoScrollbar)) {
+			if (ImGui::BeginPopupModal(m_currentTitle.c_str(), &m_isOpen, ImGuiWindowFlags_NoScrollbar)) 
+			{
 				m_renderFileDialog();
+
+				const auto& io(ImGui::GetIO());
+				if (ImGui::IsKeyReleased(io.KeyMap[ImGuiKey_Enter]))
+				{
+					std::string filename(m_inputTextbox);
+					bool success = false;
+					if (!filename.empty() || m_type == IFD_DIALOG_DIRECTORY)
+					{
+						success = m_finalize(filename);
+					}
+#ifdef _WIN32
+					if (!success)
+					{
+						MessageBeep(MB_ICONERROR);
+					}
+#endif
+
+				}
+				else if (ImGui::IsKeyReleased(io.KeyMap[ImGuiKey_Escape]))
+				{
+					m_finalize();
+				}
+				
 				ImGui::EndPopup();
 			}
-			else m_isOpen = false;
+			else
+			{
+				m_isOpen = false;
+			}
 		}
 
 		return isMe && !m_isOpen;
 	}
+	
 	void FileDialog::Close()
 	{
 		m_currentKey.clear();
@@ -775,7 +808,7 @@ namespace ifd {
 		uint8_t* data = (uint8_t*)malloc(byteSize);
 		GetBitmapBits(iconInfo.hbmColor, byteSize, data);
 
-		m_icons[pathU8] = this->CreateTexture(data, ds.dsBm.bmWidth, ds.dsBm.bmHeight, 0);
+		m_icons[pathU8] = this->CreateTexture(data, ds.dsBm.bmWidth, ds.dsBm.bmHeight, 0, pathU8.c_str());
 
 		free(data);
 
@@ -811,7 +844,7 @@ namespace ifd {
 			uint8_t* data = (uint8_t*)ifd::GetDefaultFileIcon();
 			if (iconID == 0)
 				data = (uint8_t*)ifd::GetDefaultFolderIcon();
-			m_icons[pathU8] = this->CreateTexture(data, DEFAULT_ICON_SIZE, DEFAULT_ICON_SIZE, 0);
+			m_icons[pathU8] = this->CreateTexture(data, DEFAULT_ICON_SIZE, DEFAULT_ICON_SIZE, 0, pathU8.c_str());
 		}
 		// dark theme - invert the colors
 		else {
@@ -829,7 +862,7 @@ namespace ifd {
 					invData[index + 3] = data[index + 3];
 				}
 			}
-			m_icons[pathU8] = this->CreateTexture(invData, DEFAULT_ICON_SIZE, DEFAULT_ICON_SIZE, 0);
+			m_icons[pathU8] = this->CreateTexture(invData, DEFAULT_ICON_SIZE, DEFAULT_ICON_SIZE, 0, pathU8.c_str());
 
 			free(invData);
 		}
@@ -1183,15 +1216,22 @@ namespace ifd {
 			// content
 			int fileId = 0;
 			for (auto& entry : m_content) {
-				if (entry.HasIconPreview && entry.IconPreviewData != nullptr) {
-					entry.IconPreview = this->CreateTexture(entry.IconPreviewData, entry.IconPreviewWidth, entry.IconPreviewHeight, 1);
-					stbi_image_free(entry.IconPreviewData);
-					entry.IconPreviewData = nullptr;
-				}
-
 				std::string filename = entry.Path.filename().u8string();
 				if (filename.size() == 0)
 					filename = entry.Path.u8string(); // drive
+
+				if (entry.HasIconPreview && entry.IconPreviewData != nullptr) 
+				{
+					const std::string fullfilename(entry.Path.u8string());
+					entry.IconPreview = this->CreateTexture(entry.IconPreviewData
+						, entry.IconPreviewWidth
+						, entry.IconPreviewHeight
+						, 1
+						, fullfilename.c_str()
+					);
+					stbi_image_free(entry.IconPreviewData);
+					entry.IconPreviewData = nullptr;
+				}
 
 				bool isSelected = std::count(m_selections.begin(), m_selections.end(), entry.Path);
 
@@ -1303,7 +1343,7 @@ namespace ifd {
 		
 		ImGui::PushStyleColor(ImGuiCol_Button, 0);
 		if (noBackHistory) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		if (ImGui::ArrowButtonEx("##back", ImGuiDir_Left, ImVec2(GUI_ELEMENT_SIZE, GUI_ELEMENT_SIZE), m_backHistory.empty() * ImGuiItemFlags_Disabled)) {
+		if (ImGui::ArrowButtonEx("##back", ImGuiDir_Left, ImVec2(GUI_ELEMENT_SIZE, GUI_ELEMENT_SIZE), m_backHistory.empty() * ImGuiButtonFlags_Disabled)) {
 			std::filesystem::path newPath = m_backHistory.top();
 			m_backHistory.pop();
 			m_forwardHistory.push(m_currentDirectory);
@@ -1314,7 +1354,7 @@ namespace ifd {
 		ImGui::SameLine();
 		
 		if (noForwardHistory) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-		if (ImGui::ArrowButtonEx("##forward", ImGuiDir_Right, ImVec2(GUI_ELEMENT_SIZE, GUI_ELEMENT_SIZE), m_forwardHistory.empty() * ImGuiItemFlags_Disabled)) {
+		if (ImGui::ArrowButtonEx("##forward", ImGuiDir_Right, ImVec2(GUI_ELEMENT_SIZE, GUI_ELEMENT_SIZE), m_forwardHistory.empty() * ImGuiButtonFlags_Disabled)) {
 			std::filesystem::path newPath = m_forwardHistory.top();
 			m_forwardHistory.pop();
 			m_backHistory.push(m_currentDirectory);
